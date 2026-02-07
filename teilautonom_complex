@@ -1,0 +1,225 @@
+import { fileSearchTool, RunContext, Agent, AgentInputItem, Runner, withTrace } from "@openai/agents";
+import { z } from "zod";
+
+
+// Tool definitions
+const fileSearch = fileSearchTool([
+  "vs_6922f1ed28088191b37a79991f02b22f"
+])
+const fileSearch1 = fileSearchTool([
+  "vs_68ffcc71b9d081919eae6ab4b4fb4d62"
+])
+const HiringDeciderSchema = z.object({ to: z.string(), subject: z.string(), body: z.string() });
+const HiringsuggestionSchema = z.object({ candidate: z.string(), subject: z.string(), body: z.string() });
+interface HiringDeciderContext {
+  stateSubject: string;
+  stateBody: string;
+}
+const hiringDeciderInstructions = (runContext: RunContext<HiringDeciderContext>, _agent: Agent<HiringDeciderContext>) => {
+  const { stateSubject, stateBody } = runContext.context;
+  return `Du bist ein Hiring-Orchestrator.
+
+Eingaben:
+- SUBJECT = ${stateSubject}
+- BODY = ${stateBody}
+
+Sende eine E-Mail an die feste Adresse leitung.personalentwicklung@gmail.com mit dem angegebenen Betreff (SUBJECT) und Inhalt (BODY), die beide als Eingabe für diesen Node definiert sind.
+
+Bestätige im Chat, dass die E-Mail gesendet wurde.`
+}
+const hiringDecider = new Agent({
+  name: "Hiring Decider",
+  instructions: hiringDeciderInstructions,
+  model: "gpt-5-nano",
+  outputType: HiringDeciderSchema,
+  modelSettings: {
+    reasoning: {
+      effort: "minimal",
+      summary: "auto"
+    },
+    store: true
+  }
+});
+
+const hiringsuggestion = new Agent({
+  name: "HiringSuggestion",
+  instructions: `Stellenausschreibung über File Search.
+
+Verhalten:
+Triff anhand der Dateien genau eine Einstellungsentscheidung. Gib GENAU eine Zeile aus:
+Name der einzustellenden Person
+<1–2 Sätze mit kurzen erklärung.>`,
+  model: "gpt-5-mini",
+  tools: [
+    fileSearch
+  ],
+  outputType: HiringsuggestionSchema,
+  modelSettings: {
+    reasoning: {
+      effort: "low",
+      summary: "auto"
+    },
+    store: true
+  }
+});
+
+interface AskingfeedbackContext {
+  stateFixedAsking: string;
+}
+const askingfeedbackInstructions = (runContext: RunContext<AskingfeedbackContext>, _agent: Agent<AskingfeedbackContext>) => {
+  const { stateFixedAsking } = runContext.context;
+  return `Gib exakt folgenden Text aus, ohne weitere Erklärungen oder Ergänzungen: 
+
+ ${stateFixedAsking}
+
+Kontext: Du bist dafür verantwortlich, nach Feedback beim User zu fragen auf Basis der bisherigen Chatverlaufs.`
+}
+const askingfeedback = new Agent({
+  name: "AskingFeedback",
+  instructions: askingfeedbackInstructions,
+  model: "gpt-5-nano",
+  tools: [
+    fileSearch1
+  ],
+  modelSettings: {
+    reasoning: {
+      effort: "low",
+      summary: "auto"
+    },
+    store: true
+  }
+});
+
+const agentabschluss = new Agent({
+  name: "AgentAbschluss",
+  instructions: `Beende den Chat abschließend exakt mit folgendem Satz: \"Bitte gehe nun zurück zu der Umfrage.\"
+
+Wichtig: Ausschließlich der oben genannte Satz soll von dir ausgegeben werden, ohne jeglichen Zusatz durch beispielsweise Zusammenfassungen.`,
+  model: "gpt-5-nano",
+  modelSettings: {
+    reasoning: {
+      effort: "low",
+      summary: "auto"
+    },
+    store: true
+  }
+});
+
+const approvalRequest = (message: string) => {
+
+  // TODO: Implement
+  return true;
+}
+
+type WorkflowInput = { input_as_text: string };
+
+
+// Main code entrypoint
+export const runWorkflow = async (workflow: WorkflowInput) => {
+  return await withTrace("AgentValidationHard", async () => {
+    const state = {
+      approved: false,
+      feedback: null,
+      counter: 0,
+      body: null,
+      subject: null,
+      candidate: null,
+      fb_is_given: null,
+      feedback_is_given: false,
+      fixed_asking: "Gib exakt folgenden Text aus, ohne weitere Erklärungen oder Ergänzungen: \"Bitte geben Sie an, welcher Bewerber bevorzugt werden soll.\""
+    };
+    const conversationHistory: AgentInputItem[] = [
+      { role: "user", content: [{ type: "input_text", text: workflow.input_as_text }] }
+    ];
+    const runner = new Runner({
+      traceMetadata: {
+        __trace_source__: "agent-builder",
+        workflow_id: "wf_69106964f31481908563a95f6deb1db80ca99e4b568325fe"
+      }
+    });
+    const hiringsuggestionResultTemp = await runner.run(
+      hiringsuggestion,
+      [
+        ...conversationHistory
+      ]
+    );
+    conversationHistory.push(...hiringsuggestionResultTemp.newItems.map((item) => item.rawItem));
+
+    if (!hiringsuggestionResultTemp.finalOutput) {
+        throw new Error("Agent result is undefined");
+    }
+
+    const hiringsuggestionResult = {
+      output_text: JSON.stringify(hiringsuggestionResultTemp.finalOutput),
+      output_parsed: hiringsuggestionResultTemp.finalOutput
+    };
+    state.body = hiringsuggestionResult.output_parsed.body;
+    state.subject = hiringsuggestionResult.output_parsed.subject;
+    state.candidate = hiringsuggestionResult.output_parsed.candidate;
+    const approvalMessage = `Entscheidung: 
+  ${hiringsuggestionResult.output_parsed.candidate}
+   ${state.body}
+
+  Bitte bestätigen (Approve) oder ablehnen (Reject).`;
+
+    if (approvalRequest(approvalMessage)) {
+        const hiringDeciderResultTemp = await runner.run(
+          hiringDecider,
+          [
+            ...conversationHistory
+          ],
+          {
+            context: {
+              stateSubject: state.subject,
+              stateBody: state.body
+            }
+          }
+        );
+        conversationHistory.push(...hiringDeciderResultTemp.newItems.map((item) => item.rawItem));
+
+        if (!hiringDeciderResultTemp.finalOutput) {
+            throw new Error("Agent result is undefined");
+        }
+
+        const hiringDeciderResult = {
+          output_text: JSON.stringify(hiringDeciderResultTemp.finalOutput),
+          output_parsed: hiringDeciderResultTemp.finalOutput
+        };
+        const agentabschlussResultTemp = await runner.run(
+          agentabschluss,
+          [
+            ...conversationHistory
+          ]
+        );
+
+        if (!agentabschlussResultTemp.finalOutput) {
+            throw new Error("Agent result is undefined");
+        }
+
+        const agentabschlussResult = {
+          output_text: agentabschlussResultTemp.finalOutput ?? ""
+        };
+    } else {
+        const askingfeedbackResultTemp = await runner.run(
+          askingfeedback,
+          [
+            ...conversationHistory
+          ],
+          {
+            context: {
+              stateFixedAsking: state.fixed_asking
+            }
+          }
+        );
+        conversationHistory.push(...askingfeedbackResultTemp.newItems.map((item) => item.rawItem));
+
+        if (!askingfeedbackResultTemp.finalOutput) {
+            throw new Error("Agent result is undefined");
+        }
+
+        const askingfeedbackResult = {
+          output_text: askingfeedbackResultTemp.finalOutput ?? ""
+        };
+    }
+  });
+}
