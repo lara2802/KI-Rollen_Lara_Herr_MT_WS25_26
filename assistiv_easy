@@ -1,0 +1,68 @@
+import { fileSearchTool, Agent, AgentInputItem, Runner, withTrace } from "@openai/agents";
+
+
+// Tool definitions
+const fileSearch = fileSearchTool([
+  "vs_6922f1acf4c48191a7b13c84a668b099"
+])
+const hiringSuggestion = new Agent({
+  name: "Hiring Suggestion",
+  instructions: `Du bist ein Einstellungsassistent, der als Chatbot für Fragen dient.  
+Die zugrunde liegenden Daten für die Einstellung werden über Dateieingaben bereitgestellt.
+
+Eingaben:
+- Bewerbungsdatei(en) über File Search.
+- Instruktion über die Anforderungen für die Bewerberauswahl.
+
+Verhalten:
+- Gib kurze, prägnante Antworten auf Fragen.`,
+  model: "gpt-5-nano",
+  tools: [
+    fileSearch
+  ],
+  modelSettings: {
+    reasoning: {
+      effort: "low",
+      summary: "auto"
+    },
+    store: true
+  }
+});
+
+type WorkflowInput = { input_as_text: string };
+
+
+// Main code entrypoint
+export const runWorkflow = async (workflow: WorkflowInput) => {
+  return await withTrace("ChatbotEasy", async () => {
+    const state = {
+      decision_to_hire: null,
+      subject: null,
+      body: null
+    };
+    const conversationHistory: AgentInputItem[] = [
+      { role: "user", content: [{ type: "input_text", text: workflow.input_as_text }] }
+    ];
+    const runner = new Runner({
+      traceMetadata: {
+        __trace_source__: "agent-builder",
+        workflow_id: "wf_69072ccdece8819093ef269618ce0b4b0de525a8bfab5d5c"
+      }
+    });
+    const hiringSuggestionResultTemp = await runner.run(
+      hiringSuggestion,
+      [
+        ...conversationHistory
+      ]
+    );
+    conversationHistory.push(...hiringSuggestionResultTemp.newItems.map((item) => item.rawItem));
+
+    if (!hiringSuggestionResultTemp.finalOutput) {
+        throw new Error("Agent result is undefined");
+    }
+
+    const hiringSuggestionResult = {
+      output_text: hiringSuggestionResultTemp.finalOutput ?? ""
+    };
+  });
+}
