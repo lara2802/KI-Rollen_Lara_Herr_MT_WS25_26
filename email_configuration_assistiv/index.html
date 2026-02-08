@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <title>E-Mail an die Leitung der Personalentwicklung</title>
+  <style>
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      background: #f6f7fb;
+      margin: 0;
+      padding: 0;
+    }
+    .container {
+      max-width: 450px;
+      margin: 60px auto;
+      background: #fff;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.07);
+      border-radius: 12px;
+      padding: 32px 32px 24px 32px;
+    }
+    h1 {
+      font-size: 1.5rem;
+      margin-bottom: 18px;
+      text-align: center;
+      color: #38476b;
+    }
+    label {
+      display: block;
+      margin-top: 18px;
+      font-weight: 500;
+      color: #3e3e3e;
+    }
+    input, textarea {
+      width: 100%;
+      padding: 8px 10px;
+      margin-top: 5px;
+      border: 1px solid #d0d4ea;
+      border-radius: 6px;
+      font-size: 1rem;
+      background: #f8fafd;
+      transition: border 0.2s;
+    }
+    input:focus, textarea:focus {
+      border-color: #6c7cff;
+      outline: none;
+    }
+    textarea {
+      min-height: 70px;
+      resize: vertical;
+    }
+    .button {
+      margin-top: 24px;
+      width: 100%;
+      background: #6c7cff;
+      color: #fff;
+      border: none;
+      font-size: 1.1rem;
+      border-radius: 6px;
+      padding: 12px 0;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .button:hover {
+      background: #38476b;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>E-Mail an die Leitung der Personalentwicklung</h1>
+
+    <!-- WICHTIG: method="POST" muss exakt so dastehen -->
+    <form action="https://api.web3forms.com/submit" method="POST">
+  <input type="hidden" name="access_key" value="52ee2da0-95d7-49c5-926a-9d7ee854a4ce">
+  <input type="hidden" name="subject" value="Experiment: E-Mail an die Personalentwicklung">
+  <input type="hidden" name="redirect" value="https://lara2802.github.io/E-Mail-simulation/danke.html">
+      
+      <!-- Hidden field for respondent_id (will be populated by JavaScript) -->
+      <input type="hidden" id="respondent_id" name="Respondent_ID" value="">
+
+      <label for="subject">Betreff:</label>
+      <input type="text" id="subject" name="Betreff" required>
+
+      <label for="message">Nachricht:</label>
+      <textarea id="message" name="Nachricht" required></textarea>
+
+      <button class="button" type="submit">Senden</button>
+    </form>
+  </div>
+
+  <script>
+    // Wait for DOM to be ready
+    document.addEventListener('DOMContentLoaded', function() {
+      // URL-Parameter respondent_id auslesen
+      const params = new URLSearchParams(window.location.search);
+      const respondentId = params.get('respondent_id');
+      
+      // Hidden Field befüllen, wenn respondent_id vorhanden
+      const hiddenInput = document.getElementById('respondent_id');
+      if (hiddenInput && respondentId) {
+        hiddenInput.value = respondentId;
+        console.log('Respondent ID captured:', respondentId); // For debugging
+      } else if (!respondentId) {
+        console.warn('No respondent_id found in URL');
+      }
+    });
+  </script>
+</body>
+
+</html>
